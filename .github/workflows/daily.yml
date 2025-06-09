@@ -23,7 +23,7 @@ jobs:
       - name: Run screener
         run: |
           pip install --quiet pandas requests --no-cache-dir
-          echo "DEBUG  FINNHUB_KEY=${{ secrets.FINNHUB_KEY }}"   # <- will show *** if present
+          echo "DEBUG  FINNHUB_KEY=${{ secrets.FINNHUB_KEY }}"   # shows *** if present
           python headline_fetcher.py
 
       # 4️⃣  Upload the CSV so you can download it from the app
