@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣  Check out the repo
+      # 1️⃣  Check out this repo
       - uses: actions/checkout@v4
 
       # 2️⃣  Set up Python 3.11
@@ -19,14 +19,16 @@ jobs:
         with:
           python-version: '3.11'
 
-      # 3️⃣  Install lightweight deps and run the screener
+      # 3️⃣  Install deps & run the screener
       - name: Run screener
         run: |
           pip install --quiet pandas requests --no-cache-dir
+          echo "DEBUG  FINNHUB_KEY=${{ secrets.FINNHUB_KEY }}"   # <- will show *** if present
           python headline_fetcher.py
 
-      # 4️⃣  Upload the CSV so you can download it from the GitHub app
+      # 4️⃣  Upload the CSV so you can download it from the app
       - uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: daily-long-list
           path: longs_*.csv
