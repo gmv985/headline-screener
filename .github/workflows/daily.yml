@@ -1,63 +1,32 @@
-# ===== headline-screener GitHub Action =====
 name: headline-screener
 
 on:
   schedule:
-    - cron: '5 10 * * 1-5'       # 06:05 US-Eastern every weekday
-  workflow_dispatch:             # manual “Run workflow” button
-
-# ---- 1. where the e-mail should come from / go to ----
-env:
-  MAIL_FROM: "Headline Screener <gonzalomontes85@gmail.com>"
-  MAIL_TO:   "gonzalomontes85@gmail.com"
+    # 06:05 US-Eastern every weekday
+    - cron: '5 10 * * 1-5'
+  workflow_dispatch:            # manual “Run workflow” button
 
 jobs:
   run:
     runs-on: ubuntu-latest
+
     steps:
-    # 2. pull the repo
-    - uses: actions/checkout@v4
+      # 1️⃣  Check out the repo
+      - uses: actions/checkout@v4
 
-    # 3. set up Python
-    - uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      # 2️⃣  Set up Python 3.11
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    # 4. install deps and run the FinBERT headline script
-    - name: Run screener
-      run: |
-        pip install --quiet pandas requests transformers torch --no-cache-dir
-        python headline_fetcher.py
+      # 3️⃣  Install lightweight deps and run the screener
+      - name: Run screener
+        run: |
+          pip install --quiet pandas requests --no-cache-dir
+          python headline_fetcher.py
 
-    # 5. upload the CSV so you can still download it from the UI
-    - uses: actions/upload-artifact@v4
-      with:
-        name: daily-long-list
-        path: longs_*.csv
-
-    # 6. grab today’s date for the e-mail subject line
-    - name: Set date var
-      id: today
-      run: echo "today=$(date +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
-
-    # 7. send the CSV by e-mail
-    - name: ✉️  Mail the CSV
-      if: success()
-      uses: dawidd6/action-send-mail@v5
-      with:
-        secure: true
-        server_address:  ${{ secrets.SMTP_SERVER }}
-        server_port:     ${{ secrets.SMTP_PORT }}
-        username:        ${{ secrets.MAIL_USERNAME }}
-        password:        ${{ secrets.MAIL_PASSWORD }}
-        from:            ${{ env.MAIL_FROM }}
-        to:              ${{ env.MAIL_TO }}
-        subject: "Headline Screener — list for ${{ steps.today.outputs.today }}"
-        body: |
-          Hi Gonzalo,
-
-          Attached is today's CSV with tickers whose headlines scored
-          positive sentiment.  Have a good trading day!
-
-          — Your GitHub bot  (run #${{ github.run_number }})
-        attachments: longs_*.csv
+      # 4️⃣  Upload the CSV so you can download it from the GitHub app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: daily-long-list
+          path: longs_*.csv
