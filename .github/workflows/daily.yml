@@ -2,35 +2,33 @@ name: headline-screener
 
 on:
   schedule:
-    # 06:05 US-Eastern every weekday
-    - cron: '5 10 * * 1-5'
-  workflow_dispatch:            # lets you press the “Run workflow” button
+    - cron: '5 10 * * 1-5'    # 06:05 US-Eastern weekdays
+  workflow_dispatch:
 
 jobs:
   run:
     runs-on: ubuntu-latest
 
+    # 👇 make the secret visible to every step as $FINNHUB_KEY
+    env:
+      FINNHUB_KEY: ${{ secrets.FINNHUB_KEY }}
+      AV_KEY:      ${{ secrets.AV_KEY }}
+
     steps:
-      # 1️⃣  Pull this repository
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      # 2️⃣  Set up Python 3.11
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
 
-      # 3️⃣  Install lightweight deps and run the screener
-      - name: Run screener
-        run: |
-          pip install --quiet pandas requests --no-cache-dir
-          # --- debug: show how many characters the key has ---
-          echo "DEBUG  FINNHUB_KEY length=${#FINNHUB_KEY}"
-          # ---------------------------------------------------
-          python headline_fetcher.py
+    - name: Run screener
+      run: |
+        pip install --quiet pandas requests --no-cache-dir
+        echo "DEBUG  FINNHUB_KEY length=${#FINNHUB_KEY}"
+        python headline_fetcher.py
 
-      # 4️⃣  Upload CSV so you can download it in the GitHub app
-      - uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: daily-long-list
-          path: longs_*.csv
+    - uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: daily-long-list
+        path: longs_*.csv
