@@ -2,7 +2,6 @@ import os, json, requests, datetime as dt, pandas as pd, time
 
 TODAY = dt.date.today().isoformat()
 
-# ---------- Finnhub ----------
 def grab_finnhub():
     key = os.getenv("FINNHUB_KEY", "").strip()
     if not key:
@@ -11,30 +10,33 @@ def grab_finnhub():
     data = requests.get(url, timeout=15).json()
     if isinstance(data, dict) and "error" in data:
         print("Finnhub error:", data['error']); return []
-    return [(it["related"].split(",")[0], it["headline"])
-            for it in data if it.get("related")]
+    out = []
+    for it in data:
+        sym = it.get("related", "").split(",")[0] or "UNKNOWN"
+        out.append((sym, it["headline"]))
+    return out
 
-# ---------- Alpha Vantage (optional) ----------
 def grab_alpha():
     key = os.getenv("AV_KEY", "").strip()
     if not key:
         return []
     url = f"https://www.alphavantage.co/query?function=NEWS_SENTIMENT&apikey={key}"
     data = requests.get(url, timeout=15).json().get("feed", [])
-    # Some records lack 'ticker' – skip them safely
-    return [(f["ticker"], f["title"])
-            for f in data if "ticker" in f and f.get("title")]
+    return [(f.get("ticker","UNKNOWN"), f["title"]) for f in data]
 
-# ---------- Pull headlines ----------
 rows = []
 for fn in (grab_finnhub, grab_alpha):
     rows.extend({"sym": s, "hl": h} for s, h in fn())
 
 df = pd.DataFrame(rows).drop_duplicates()
-if df.empty:
-    raise SystemExit("No headlines pulled — check API keys or quotas.")
 
-# ---------- Sentiment tagging via FinBERT API ----------
+# If still empty, just create an empty CSV instead of exiting
+if df.empty:
+    pd.DataFrame(columns=["sym","score"]).to_csv(f"longs_{TODAY}.csv", index=False)
+    print("✅  No tickers today, empty CSV created.")
+    raise SystemExit
+
+# ---------- FinBERT sentiment ----------
 HF_URL = "https://api-inference.huggingface.co/models/ProsusAI/finbert"
 HF_HEADERS = {"Accept": "application/json"}
 
@@ -42,16 +44,15 @@ def score(headline):
     try:
         r = requests.post(HF_URL, headers=HF_HEADERS,
                           data=json.dumps({"inputs": headline}), timeout=20)
-        if r.status_code == 503:           # model loading / busy
+        if r.status_code == 503:
             time.sleep(1); return 0
         result = r.json()
         if not isinstance(result, list):
             return 0
         label = result[0]["label"].lower()
         return {"positive": 1, "negative": -1}.get(label, 0)
-    except (requests.exceptions.RequestException,
-            json.JSONDecodeError, KeyError, IndexError):
-        return 0          # neutral on any error
+    except Exception:
+        return 0
 
 df["score"] = df["hl"].apply(score)
 watch = (df.groupby("sym")["score"].mean()
