@@ -4,14 +4,14 @@ on:
   schedule:
     # 06:05 US-Eastern every weekday
     - cron: '5 10 * * 1-5'
-  workflow_dispatch:            # manual “Run workflow” button
+  workflow_dispatch:            # lets you press the “Run workflow” button
 
 jobs:
   run:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣  Check out this repo
+      # 1️⃣  Pull this repository
       - uses: actions/checkout@v4
 
       # 2️⃣  Set up Python 3.11
@@ -19,14 +19,16 @@ jobs:
         with:
           python-version: '3.11'
 
-      # 3️⃣  Install deps & run the screener
+      # 3️⃣  Install lightweight deps and run the screener
       - name: Run screener
         run: |
           pip install --quiet pandas requests --no-cache-dir
-          echo "DEBUG  FINNHUB_KEY=${{ secrets.FINNHUB_KEY }}"   # shows *** if present
+          # --- debug: show how many characters the key has ---
+          echo "DEBUG  FINNHUB_KEY length=${#FINNHUB_KEY}"
+          # ---------------------------------------------------
           python headline_fetcher.py
 
-      # 4️⃣  Upload the CSV so you can download it from the app
+      # 4️⃣  Upload CSV so you can download it in the GitHub app
       - uses: actions/upload-artifact@v4
         if: success()
         with:
