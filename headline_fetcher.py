@@ -1,4 +1,4 @@
- import os, json, requests, datetime as dt, pandas as pd, time
+import os, json, requests, datetime as dt, pandas as pd, time
 
 TODAY = dt.date.today().isoformat()
 
@@ -9,7 +9,7 @@ def grab_finnhub():
     url = f"https://finnhub.io/api/v1/news?category=general&token={key}"
     data = requests.get(url, timeout=15).json()
     if isinstance(data, dict) and "error" in data:
-        print("Finnhub error:", data["error"]); return []
+        print("Finnhub error:", data['error']); return []
     return [(it["related"].split(",")[0], it["headline"]) for it in data]
 
 def grab_alpha():
@@ -37,8 +37,7 @@ def score(headline):
         r = requests.post(HF_URL, headers=HF_HEADERS,
                           data=json.dumps(payload), timeout=20)
         if r.status_code == 503:
-            time.sleep(1)
-            return 0
+            time.sleep(1); return 0
         result = r.json()
         if not isinstance(result, list):
             return 0
