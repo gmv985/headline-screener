@@ -36,9 +36,9 @@ def score(headline):
     try:
         r = requests.post(HF_URL, headers=HF_HEADERS,
                           data=json.dumps(payload), timeout=20)
-        # HF might reply with 503 (model loading) or non-JSON; guard for that
         if r.status_code == 503:
-            time.sleep(1); return 0            # neutral fallback
+            time.sleep(1)
+            return 0
         result = r.json()
         if not isinstance(result, list):
             return 0
@@ -46,7 +46,7 @@ def score(headline):
         return {"positive": 1, "negative": -1}.get(label, 0)
     except (requests.exceptions.RequestException,
             json.JSONDecodeError, KeyError, IndexError):
-        return 0   # neutral on any error
+        return 0
 
 df["score"] = df["hl"].apply(score)
 watch = (df.groupby("sym")["score"].mean()
