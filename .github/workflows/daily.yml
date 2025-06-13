@@ -1,23 +1,24 @@
 name: headline-screener
 
 on:
-  # Runs every weekday at 06:05 US-Eastern (10:05 UTC)
+  # 09:05 ET  (13:05 UTC)  and  16:05 ET  (20:05 UTC)  Monday-Friday
   schedule:
-    - cron: '5 10 * * 1-5'
-  # Lets you trigger it manually from the Actions tab
+    - cron: '5 13 * * 1-5'
+    - cron: '5 20 * * 1-5'
+  # manual “Run workflow” button
   workflow_dispatch:
 
 jobs:
   run:
     runs-on: ubuntu-latest
 
-    # Make the secrets visible to the Python script
+    # expose secrets to Python
     env:
       FINNHUB_KEY: ${{ secrets.FINNHUB_KEY }}
       AV_KEY:      ${{ secrets.AV_KEY }}
 
     steps:
-      # 1️⃣  Check out this repository
+      # 1️⃣  Check out this repo
       - uses: actions/checkout@v4
 
       # 2️⃣  Set up Python 3.11
@@ -25,14 +26,14 @@ jobs:
         with:
           python-version: '3.11'
 
-      # 3️⃣  Install deps and run the screener
+      # 3️⃣  Install deps & run the screener
       - name: Run screener
         run: |
           pip install --quiet pandas requests --no-cache-dir
           echo "DEBUG  FINNHUB_KEY length=${#FINNHUB_KEY}"
           python headline_fetcher.py
 
-      # 4️⃣  Upload all CSVs (longs & shorts) as one artifact
+      # 4️⃣  Upload all CSVs (longs & shorts) plus any debug CSV
       - uses: actions/upload-artifact@v4
         if: success()
         with:
