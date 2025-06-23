@@ -1,0 +1,29 @@
+name: FinBrain Screener (daily)
+
+on:
+  schedule:                     # every trading day at 15:30 UTC≈11:30 EST
+    - cron:  '30 15 * * 1-5'
+  workflow_dispatch:            # run manually from the Actions tab
+
+jobs:
+  screener:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout empty repo
+        uses: actions/checkout@v4
+
+      - name: Install Python deps
+        run: |
+          pip install --quiet finbrain-python pandas numpy
+
+      - name: Run screener
+        env:
+          FINBRAIN_KEY: ${{ secrets.FINBRAIN_KEY }}
+        run: |
+          python finbrain_screener.py
+
+      - name: Upload CSV artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: finbrain_longlist
+          path: finbrain_longlist.csv
