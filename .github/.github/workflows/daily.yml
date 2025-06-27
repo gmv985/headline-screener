@@ -1,0 +1,29 @@
+name: Free Momentum-News Screener
+
+on:
+  # 10:10 ET (14:10 UTC) – about 20 min after NYSE open
+  schedule:
+    - cron: "10 14 * * 1-5"
+  workflow_dispatch:        # manual Run-button
+
+jobs:
+  screener:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Python deps
+      run: |
+        python -m pip install --quiet pandas yfinance requests transformers==4.41.1
+
+    - name: Run screener script
+      env:
+        FINNHUB_KEY: ${{ secrets.FINNHUB_KEY }}
+      run: python finnhub_news_screener.py
+
+    - name: Upload CSV
+      uses: actions/upload-artifact@v4
+      with:
+        name: daily-picks
+        path: finnhub_longlist.csv
