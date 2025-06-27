@@ -1,14 +1,14 @@
 name: Momentum-News Screener
 
 on:
-  workflow_dispatch:          # run by hand
-  schedule:                   # and every weekday 13:30 UTC
-    - cron: "30 13 * * 1-5"
+  workflow_dispatch:
+  schedule:
+    # every weekday at 13:30 UTC  (= 09:30 ET market open)
+    - cron:  '30 13 * * 1-5'
 
 jobs:
-  run:
+  screener:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -16,20 +16,19 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.10"
+          python-version: '3.10'
 
       - name: Install dependencies
         run: |
           python -m pip install --quiet --upgrade pip
-          pip install --quiet "numpy>=1.26.4"
-          pip install --quiet --index-url https://download.pytorch.org/whl/cpu torch torchvision torchaudio
-          pip install --quiet pandas requests transformers yfinance
+          pip install --quiet numpy pandas requests yfinance transformers
+          # CPU-only torch ≥2.2 (required by Transformers)
+          pip install --quiet --index-url https://download.pytorch.org/whl/cpu torch>=2.2.0 torchvision torchaudio
 
       - name: Run screener
         env:
           FINNHUB_KEY: ${{ secrets.FINNHUB_KEY }}
-        run: |
-          python finnhub_news_screener.py
+        run: python finnhub_news_screener.py
 
       - name: Upload results
         if: success()
