@@ -1,64 +1,75 @@
 #!/usr/bin/env python3
 """
-Pulls S&P 500 tickers, checks today’s intraday return with yfinance,
-computes 24 h FinBERT sentiment from Finnhub headlines and writes two lists:
-  longs_<YYYY-MM-DD>.csv  – best positive momentum & sentiment
-  shorts_<YYYY-MM-DD>.csv – worst negative momentum & sentiment
-Needs a FINNHUB_KEY env var (free key works, quota is low).
+1. Pull S&P-500 constituent list (free from Wikipedia)
+2. Compute 1-day momentum (yesterday close minus close-2-days-ago)
+3. Rank top 30 & bottom 30 symbols
+4. Fetch last-24h headlines from Finnhub for just those 60 tickers
+5. Score each headline with FinBERT → aggregate to NewsScore 0-10
+6. Produce finnhub_longlist.csv  (bullish + bearish together)
 """
-import os, sys, datetime as dt, requests, pandas as pd, yfinance as yf
+
+import os, datetime as dt, requests, pandas as pd, numpy as np
+import yfinance as yf
 from transformers import pipeline
 
-API = "https://finnhub.io/api/v1/news?category=general&symbol={tkr}&token={key}"
+FINNHUB = os.getenv("FINNHUB_KEY")
+HEADERS  = {"X-Finnhub-Token": FINNHUB}
 
-# ---------- helpers ---------------------------------------------------------
-def sp500():
-    """Return current S&P 500 symbols from Wikipedia."""
-    return pd.read_html(
-        "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")[0]["Symbol"]
+TODAY   = dt.date.today().isoformat()
 
-def intraday_ret(tkr):
-    end = dt.datetime.utcnow(); start = end - dt.timedelta(days=3)
-    px = yf.download(tkr, start=start, end=end, interval="30m",
-                     progress=False)["Adj Close"]
-    return None if px.empty else px.iloc[-1]/px.iloc[0]-1
+# ---------- 1) S&P-500 tickers ----------
+sp500 = (pd.read_html("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")[0]
+         ["Symbol"].tolist())
 
-def headlines(tkr, key):
-    r = requests.get(API.format(tkr=tkr, key=key), timeout=20).json()
-    return [item["headline"] for item in r][:20]
+# ---------- 2) 1-day momentum ----------
+data = yf.download(sp500, period="3d", interval="1d", group_by="ticker", progress=False)
+rows = []
+for sym in sp500:
+    try:
+        closes = data[sym]["Close"].dropna()
+        if len(closes) >= 3:
+            diff_pct = (closes[-1] - closes[-2]) / closes[-2] * 100
+            rows.append({"symbol": sym, "momentum_pct": diff_pct})
+    except KeyError:
+        continue
+mom = pd.DataFrame(rows)
 
-def finbert():
-    print("Loading FinBERT …")
-    return pipeline("sentiment-analysis",
-                    model="ProsusAI/finbert",
-                    tokenizer="ProsusAI/finbert",
-                    device="cpu")
+top30  = mom.sort_values("momentum_pct", ascending=False).head(30)
+bot30  = mom.sort_values("momentum_pct").head(30)
+cands  = pd.concat([top30, bot30]).reset_index(drop=True)
 
-def score(hls, model):
-    if not hls: return 0
-    m = {"positive": 1, "neutral": 0, "negative": -1}
-    out = model(hls, truncation=True)
-    return sum(m[o["label"].lower()] * o["score"] for o in out) / len(out)
-# ---------------------------------------------------------------------------
+# ---------- 3) FinBERT sentiment ----------
+finbert = pipeline("sentiment-analysis",
+                   model="ProsusAI/finbert",
+                   top_k=None)
 
-def main():
-    key = os.getenv("FINNHUB_KEY")
-    if not key: sys.exit("FINNHUB_KEY not set")
+def fetch_headlines(ticker):
+    url = f"https://finnhub.io/api/v1/company-news?symbol={ticker}&from={TODAY}&to={TODAY}"
+    try:
+        js = requests.get(url, headers=HEADERS, timeout=10).json()
+        return [n["headline"] for n in js]
+    except Exception:
+        return []
 
-    model = finbert()
-    rows = []
-    for t in sp500():
-        r = intraday_ret(t);  h = headlines(t, key) if r is not None else None
-        if h is None: continue
-        rows.append({"ticker": t, "ret": r, "sent": score(h, model)})
+def score_news(titles):
+    pos = neg = 0
+    for t in titles:
+        label = finbert(t)[0]["label"].lower()
+        if label == "positive":  pos += 1
+        elif label == "negative": neg += 1
+    tot = pos + neg
+    if tot == 0:
+        return 5.0          # neutral by definition
+    # 0-10 scale
+    return round(abs(pos - neg) / tot * 10, 1)
 
-    df = pd.DataFrame(rows)
-    today = dt.date.today().isoformat()
-    df.query("ret>0 and sent>0").sort_values(["ret","sent"], ascending=False)\
-      .head(10).to_csv(f"longs_{today}.csv", index=False)
-    df.query("ret<0 and sent<0").sort_values(["ret","sent"])\
-      .head(10).to_csv(f"shorts_{today}.csv", index=False)
-    print("Done.")
+news_scores = []
+for sym in cands["symbol"]:
+    ns = score_news(fetch_headlines(sym))
+    news_scores.append(ns)
 
-if __name__ == "__main__":
-    main()
+cands["NewsScore"] = news_scores
+
+# ---------- 4) export ----------
+cands.to_csv("finnhub_longlist.csv", index=False)
+print(cands.head(10))
